@@ -1,0 +1,43 @@
+# Reproducible full deployment: MySQL + eligibility microservice + backend + frontend (nginx)
+# Usage:  docker compose up --build      then open http://localhost:3000
+services:
+  mysql:
+    image: mysql:8.0
+    environment:
+      MYSQL_DATABASE: placement_db
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:-change_me_locally}
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-p${DB_ROOT_PASSWORD:-change_me_locally}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - mysql_data:/var/lib/mysql
+
+  eligibility:
+    build: ./eligibility-service
+
+  backend:
+    build: ./backend
+    depends_on:
+      mysql:
+        condition: service_healthy
+      eligibility:
+        condition: service_started
+    environment:
+      DB_URL: jdbc:mysql://mysql:3306/placement_db
+      DB_USERNAME: root
+      DB_PASSWORD: ${DB_ROOT_PASSWORD:-change_me_locally}
+      ELIGIBILITY_URL: http://eligibility:8081
+      ELIGIBILITY_FALLBACK: "false"
+      CORS_ORIGINS: http://localhost:3000
+
+  frontend:
+    build: ./frontend
+    depends_on:
+      - backend
+    ports:
+      - "3000:80"
+
+volumes:
+  mysql_data:
